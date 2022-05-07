@@ -296,6 +296,11 @@ struct kbase_pm_callback_conf {
 	 */
 	int (*soft_reset_callback)(struct kbase_device *kbdev);
 
+	/* MALI_SEC_INTEGRATION */
+	/** Callback for GPU DVFS handler start/stop
+	**/
+	int (*power_dvfs_on_callback)(struct kbase_device *kbdev);
+
 	/*
 	 * Optional callback invoked after GPU becomes idle, not supported on
 	 * JM GPUs.

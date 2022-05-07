@@ -159,6 +159,8 @@ void kbase_timeline_term(struct kbase_timeline *timeline)
 
 	WARN_ON(!list_empty(&timeline->tl_kctx_list));
 
+	WARN_ON(!list_empty(&timeline->tl_kctx_list));
+
 	for (i = (enum tl_stream_type)0; i < TL_STREAM_TYPE_COUNT; i++)
 		kbase_tlstream_term(&timeline->streams[i]);
 

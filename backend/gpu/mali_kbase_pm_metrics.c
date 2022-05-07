@@ -130,6 +130,10 @@ int kbasep_pm_metrics_init(struct kbase_device *kbdev)
 #endif
 	spin_lock_init(&kbdev->pm.backend.metrics.lock);
 
+	/* MALI_SEC_INTEGRATION */
+	if (kbdev->vendor_callbacks->pm_metrics_init)
+		kbdev->vendor_callbacks->pm_metrics_init(kbdev);
+	else {
 #ifdef CONFIG_MALI_MIDGARD_DVFS
 	hrtimer_init(&kbdev->pm.backend.metrics.timer, CLOCK_MONOTONIC,
 							HRTIMER_MODE_REL);
@@ -137,6 +141,11 @@ int kbasep_pm_metrics_init(struct kbase_device *kbdev)
 	kbdev->pm.backend.metrics.initialized = true;
 	kbase_pm_metrics_start(kbdev);
 #endif /* CONFIG_MALI_MIDGARD_DVFS */
+	}
+
+	/* MALI_SEC_INTEGRATION */
+	if (kbdev->vendor_callbacks->cl_boost_init)
+		kbdev->vendor_callbacks->cl_boost_init(kbdev);
 
 #if MALI_USE_CSF
 	/* The sanity check on the GPU_ACTIVE performance counter
@@ -169,6 +178,10 @@ void kbasep_pm_metrics_term(struct kbase_device *kbdev)
 	kbase_ipa_control_unregister(
 		kbdev, kbdev->pm.backend.metrics.ipa_control_client);
 #endif
+
+	/* MALI_SEC_INTEGRATION */
+	if (kbdev->vendor_callbacks->pm_metrics_term)
+		kbdev->vendor_callbacks->pm_metrics_term(kbdev);
 }
 
 KBASE_EXPORT_TEST_API(kbasep_pm_metrics_term);

@@ -36,8 +36,10 @@
 #include <mali_linux_trace.h>
 
 #include "mali_kbase_dma_fence.h"
+/* MALI_SEC_INTEGRATION */
+#include <linux/smc.h>
+#include "platform/exynos/gpu_integration_defs.h"
 #include <mali_kbase_cs_experimental.h>
-
 #include <mali_kbase_caps.h>
 
 /* Return whether katom will run on the GPU or not. Currently only soft jobs and
@@ -937,6 +939,13 @@ static bool jd_submit_atom(struct kbase_context *const kctx,
 	katom->will_fail_event_code = BASE_JD_EVENT_NOT_STARTED;
 	katom->softjob_data = NULL;
 
+	if (!(katom->core_req & BASE_JD_REQ_SOFT_JOB)) {
+		if (!kbase_js_is_atom_valid(kctx->kbdev, katom)) {
+			katom->event_code = BASE_JD_EVENT_JOB_INVALID;
+			return jd_done_nolock(katom, NULL);
+		}
+	}
+
 	trace_sysgraph(SGR_ARRIVE, kctx->id, user_atom->atom_number);
 
 #if MALI_JIT_PRESSURE_LIMIT_BASE
@@ -1797,6 +1806,9 @@ int kbase_jd_init(struct kbase_context *kctx)
 		atomic_set(&kctx->jctx.atoms[i].dma_fence.seqno, 0);
 		INIT_LIST_HEAD(&kctx->jctx.atoms[i].dma_fence.callbacks);
 #endif
+
+		/* MALI_SEC_INTEGRATION */
+		spin_lock_init(&kctx->jctx.atoms[i].fence_lock);
 	}
 
 	for (i = 0; i < BASE_JD_RP_COUNT; i++)

@@ -58,7 +58,14 @@
 #include <linux/delay.h>
 #endif
 
+#include <platform/exynos/gpu_control.h>
+#include <platform/exynos/mali_kbase_platform.h>
+
 #include <linux/of.h>
+
+#if IS_ENABLED(CONFIG_MALI_EXYNOS_SECURE_RENDERING_LEGACY)
+#include <gpu_protected_mode.h>
+#endif
 
 #ifdef CONFIG_MALI_CORESTACK
 bool corestack_driver_control = true;
@@ -1449,6 +1456,10 @@ static int kbase_pm_l2_update_state(struct kbase_device *kbdev)
 
 	if (kbdev->pm.backend.invoke_poweroff_wait_wq_when_l2_off &&
 			backend->l2_state == KBASE_L2_OFF) {
+
+		/* MALI_SEC_INTEGRATION */
+		KBASE_KTRACE_ADD(kbdev, KBASE_DEVICE_PM_WAIT_WQ_QUEUE_WORK, NULL, 0u);
+
 		kbdev->pm.backend.invoke_poweroff_wait_wq_when_l2_off = false;
 		queue_work(kbdev->pm.backend.gpu_poweroff_wait_wq,
 				&kbdev->pm.backend.gpu_poweroff_wait_work);
@@ -1660,6 +1671,10 @@ static int kbase_pm_shaders_update_state(struct kbase_device *kbdev)
 		case KBASE_SHADERS_ON_CORESTACK_ON:
 			backend->shaders_desired_mask =
 				kbase_pm_ca_get_core_mask(kbdev);
+
+			if (backend->pm_current_policy->handle_event)
+				backend->pm_current_policy->handle_event(kbdev,
+					KBASE_PM_POLICY_EVENT_IDLE);
 
 			/* If shaders to change state, trigger a counter dump */
 			if (!backend->shaders_desired ||
@@ -2395,6 +2410,9 @@ void kbase_pm_clock_on(struct kbase_device *kbdev, bool is_resume)
 	struct kbase_pm_backend_data *backend = &kbdev->pm.backend;
 	bool reset_required = is_resume;
 	unsigned long flags;
+	/* MALI_SEC_INTEGRATION */
+	struct exynos_context *platform = NULL;
+	platform = (struct exynos_context *)kbdev->platform_context;
 
 	KBASE_DEBUG_ASSERT(kbdev != NULL);
 #if !MALI_USE_CSF
@@ -2429,6 +2447,9 @@ void kbase_pm_clock_on(struct kbase_device *kbdev, bool is_resume)
 
 	KBASE_KTRACE_ADD(kbdev, PM_GPU_ON, NULL, 0u);
 
+	/* MALI_SEC_INTEGRATION */
+	GPU_LOG(DVFS_INFO, LSI_RESUME_CHECK, is_resume, kbdev->pm.backend.metrics.timer_active, "resume_check\n");
+
 	if (is_resume && backend->callback_power_resume) {
 		backend->callback_power_resume(kbdev);
 		return;
@@ -2448,9 +2469,16 @@ void kbase_pm_clock_on(struct kbase_device *kbdev, bool is_resume)
 
 	if (reset_required) {
 		/* GPU state was lost, reset GPU to ensure it is in a
-		 * consistent state
-		 */
+		 * consistent state */
+		/* MALI_SEC_INTEGRATION */
+		if (kbdev->vendor_callbacks->init_hw)
+			kbdev->vendor_callbacks->init_hw(kbdev);
+
 		kbase_pm_init_hw(kbdev, PM_ENABLE_IRQS);
+
+		/* MALI_SEC_INTEGRATION */
+		if (kbdev->pm.backend.callback_power_dvfs_on)
+			kbdev->pm.backend.callback_power_dvfs_on(kbdev);
 	}
 #ifdef CONFIG_MALI_ARBITER_SUPPORT
 	else {
@@ -2481,6 +2509,11 @@ void kbase_pm_clock_on(struct kbase_device *kbdev, bool is_resume)
 	kbase_ctx_sched_restore_all_as(kbdev);
 	spin_unlock_irqrestore(&kbdev->hwaccess_lock, flags);
 	mutex_unlock(&kbdev->mmu_hw_mutex);
+
+	/* MALI_SEC_INTEGRATION */
+	if (platform) {
+		GPU_LOG(DVFS_INFO, LSI_RESUME_FREQ, kbdev->pm.backend.metrics.timer_active, platform->cur_clock, "resume_freq\n");
+	}
 
 	if (kbdev->dummy_job_wa.flags &
 			KBASE_DUMMY_JOB_WA_FLAG_LOGICAL_SHADER_POWER) {
@@ -2545,6 +2578,10 @@ bool kbase_pm_clock_off(struct kbase_device *kbdev)
 
 	KBASE_KTRACE_ADD(kbdev, PM_GPU_OFF, NULL, 0u);
 
+#if IS_ENABLED(CONFIG_MALI_EXYNOS_SECURE_RENDERING_LEGACY)
+	kbase_protected_mode_disable_exynos(kbdev);
+#endif
+
 	/* Disable interrupts. This also clears any outstanding interrupts */
 	kbase_pm_disable_interrupts(kbdev);
 	/* Ensure that any IRQ handlers have finished */
@@ -2565,6 +2602,8 @@ bool kbase_pm_clock_off(struct kbase_device *kbdev)
 	kbase_ipa_control_handle_gpu_power_off(kbdev);
 #endif
 
+	kbdev->pm.backend.gpu_ready = false;
+	
 	if (kbase_is_gpu_removed(kbdev)
 #ifdef CONFIG_MALI_ARBITER_SUPPORT
 			|| kbase_pm_is_gpu_lost(kbdev)) {
@@ -3009,12 +3048,20 @@ int kbase_pm_init_hw(struct kbase_device *kbdev, unsigned int flags)
 		KBASE_KTRACE_ADD(kbdev, PM_CORES_CHANGE_AVAILABLE, NULL, 0u);
 	spin_unlock_irqrestore(&kbdev->hwaccess_lock, irq_flags);
 
+#if IS_ENABLED(CONFIG_MALI_EXYNOS_SECURE_RENDERING_LEGACY)
+	if (kbdev->protected_mode)
+	err = kbdev->protected_ops->protected_mode_disable(
+			kbdev->protected_dev);
+	else
+		err = kbase_pm_do_reset(kbdev);
+#else
 	/* Soft reset the GPU */
 #ifdef CONFIG_MALI_ARBITER_SUPPORT
 	if (!(flags & PM_NO_RESET))
 #endif /* CONFIG_MALI_ARBITER_SUPPORT */
 		err = kbdev->protected_ops->protected_mode_disable(
 				kbdev->protected_dev);
+#endif
 
 	spin_lock_irqsave(&kbdev->hwaccess_lock, irq_flags);
 #if MALI_USE_CSF

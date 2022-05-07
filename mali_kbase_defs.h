@@ -75,6 +75,9 @@
 #include <linux/regulator/consumer.h>
 #include <linux/memory_group_manager.h>
 
+/* MALI_SEC_INTEGRATION */
+#include <platform/exynos/gpu_integration_defs.h>
+
 #include "debug/mali_kbase_debug_ktrace_defs.h"
 
 /** Number of milliseconds before we time out on a GPU soft/hard reset */
@@ -415,6 +418,10 @@ struct kbase_pm_device_data {
 #ifdef CONFIG_MALI_ARBITER_SUPPORT
 	atomic_t gpu_lost;
 #endif /* CONFIG_MALI_ARBITER_SUPPORT */
+
+	/* MALI_SEC_INTEGRATION */
+	wait_queue_head_t suspending_wait;
+	/* Wait queue set when active_count == 0 */
 	wait_queue_head_t zero_active_count_wait;
 	wait_queue_head_t resume_wait;
 
@@ -425,6 +432,10 @@ struct kbase_pm_device_data {
 	u64 debug_core_mask[BASE_JM_MAX_NR_SLOTS];
 	u64 debug_core_mask_all;
 #endif /* MALI_USE_CSF */
+#ifdef CONFIG_MALI_GPU_CORE_MASK_SELECTION
+	/* MALI_SEC_INTEGRATION */
+	u64 debug_core_mask_info;
+#endif
 
 	int (*callback_power_runtime_init)(struct kbase_device *kbdev);
 	void (*callback_power_runtime_term)(struct kbase_device *kbdev);
@@ -1109,6 +1120,10 @@ struct kbase_device {
 	struct dentry *debugfs_ctx_directory;
 	struct dentry *debugfs_instr_directory;
 
+	/* MALI_SEC_INTEGRATION */
+	/* debugfs entry for trace */
+	struct dentry *trace_dentry;
+
 #ifdef CONFIG_MALI_DEBUG
 	u64 debugfs_as_read_bitmap;
 #endif /* CONFIG_MALI_DEBUG */
@@ -1178,6 +1193,9 @@ struct kbase_device {
 	spinlock_t hwaccess_lock;
 
 	struct mutex mmu_hw_mutex;
+
+	/* MALI_SEC_INTEGRATION */
+	struct kbase_vendor_callbacks *vendor_callbacks;
 
 	u8 l2_size_override;
 	u8 l2_hash_override;
@@ -1780,6 +1798,17 @@ struct kbase_context {
 	atomic_t work_count;
 	struct timer_list soft_job_timeout;
 
+	/* MALI_SEC_INTEGRATION */
+	int ctx_status;
+	char name[CTX_NAME_SIZE];
+	/* MALI_SEC_INTEGRATION */
+	bool destroying_context;
+	atomic_t mem_profile_showing_state;
+	wait_queue_head_t mem_profile_wait;
+
+	/* MALI_SEC_INTEGRATION */
+	bool need_to_force_schedule_out;
+
 	int priority;
 	s16 atoms_count[KBASE_JS_ATOM_SCHED_PRIO_COUNT];
 	u32 slots_pullable;
@@ -1880,6 +1909,14 @@ struct kbase_context {
 #if !MALI_USE_CSF
 	void *platform_data;
 #endif
+	
+	/* MALI_SEC_INTEGRATION */
+#ifdef CONFIG_MALI_SEC_VK_BOOST
+	bool ctx_vk_need_qos;
+#endif
+
+	/* MALI_SEC_INTEGRATION */
+	u64 mem_usage;
 };
 
 #ifdef CONFIG_MALI_CINSTR_GWT

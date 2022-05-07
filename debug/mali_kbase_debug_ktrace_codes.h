@@ -161,6 +161,9 @@ int dummy_array[] = {
 #if MALI_USE_CSF
 #include "debug/backend/mali_kbase_debug_ktrace_codes_csf.h"
 #else
+/* MALI_SEC_INTEGRATION */
+#include "platform/exynos/gpu_trace_defs.h"
+
 #include "debug/backend/mali_kbase_debug_ktrace_codes_jm.h"
 #endif
 	/*

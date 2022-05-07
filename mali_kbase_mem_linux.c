@@ -1093,6 +1093,7 @@ int kbase_mem_do_sync_imported(struct kbase_context *kctx,
 		dev_dbg(kctx->kbdev->dev,
 			"Syncing imported buffer at GPU VA %llx to GPU\n",
 			reg->start_pfn);
+
 #ifdef KBASE_MEM_ION_SYNC_WORKAROUND
 		if (!WARN_ON(!reg->gpu_alloc->imported.umm.dma_attachment)) {
 			struct dma_buf_attachment *attachment = reg->gpu_alloc->imported.umm.dma_attachment;
@@ -1122,6 +1123,7 @@ int kbase_mem_do_sync_imported(struct kbase_context *kctx,
 		dev_dbg(kctx->kbdev->dev,
 			"Syncing imported buffer at GPU VA %llx to CPU\n",
 			reg->start_pfn);
+
 #ifdef KBASE_MEM_ION_SYNC_WORKAROUND
 		if (!WARN_ON(!reg->gpu_alloc->imported.umm.dma_attachment)) {
 			struct dma_buf_attachment *attachment = reg->gpu_alloc->imported.umm.dma_attachment;

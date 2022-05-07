@@ -200,6 +200,9 @@ void kbase_job_hw_submit(struct kbase_device *kbdev,
 	u64 const jc_head = select_job_chain(katom);
 	u64 affinity;
 	struct slot_rb *ptr_slot_rb = &kbdev->hwaccess.backend.slot_rb[js];
+#ifdef CONFIG_MALI_SEC_VK_BOOST
+	struct exynos_context *platform = (struct exynos_context *)kbdev->platform_context;
+#endif
 
 	lockdep_assert_held(&kbdev->hwaccess_lock);
 	KBASE_DEBUG_ASSERT(kbdev);
@@ -209,6 +212,13 @@ void kbase_job_hw_submit(struct kbase_device *kbdev,
 
 	/* Command register must be available */
 	KBASE_DEBUG_ASSERT(kbasep_jm_is_js_free(kbdev, js, kctx));
+
+#ifdef CONFIG_MALI_SEC_VK_BOOST
+	if (kctx->ctx_vk_need_qos == true)
+		platform->ctx_vk_need_qos = true;
+	else
+		platform->ctx_vk_need_qos = false;
+#endif
 
 	dev_dbg(kctx->kbdev->dev, "Write JS_HEAD_NEXT 0x%llx for atom %pK\n",
 		jc_head, (void *)katom);
@@ -645,6 +655,10 @@ void kbasep_job_slot_soft_or_hard_stop_do_action(struct kbase_device *kbdev,
 		 */
 		target_katom->atom_flags |= KBASE_KATOM_FLAG_BEEN_SOFT_STOPPED;
 
+		/* MALI_SEC_INTEGRATION */
+		if (kbdev->vendor_callbacks->update_status)
+			kbdev->vendor_callbacks->update_status(kbdev, "soft_stop", 0);
+
 		/* Mark the point where we issue the soft-stop command */
 		KBASE_TLSTREAM_TL_EVENT_ATOM_SOFTSTOP_ISSUE(kbdev, target_katom);
 
@@ -654,6 +668,9 @@ void kbasep_job_slot_soft_or_hard_stop_do_action(struct kbase_device *kbdev,
 				 JS_COMMAND_SOFT_STOP_0;
 	} else if (action == JS_COMMAND_HARD_STOP) {
 		target_katom->atom_flags |= KBASE_KATOM_FLAG_BEEN_HARD_STOPPED;
+		/* MALI_SEC_INTEGRATION */
+		if (kbdev->vendor_callbacks->update_status)
+			kbdev->vendor_callbacks->update_status(kbdev, "hard_stop", 0);
 
 		action = (target_katom->atom_flags &
 			  KBASE_KATOM_FLAGS_JOBCHAIN) ?
@@ -1050,6 +1067,11 @@ static void kbase_debug_dump_registers(struct kbase_device *kbdev)
 		kbase_reg_read(kbdev, GPU_CONTROL_REG(JM_CONFIG)));
 }
 
+/* MALI_SEC_INTEGRATION */
+void gpu_dump_register_hooks(struct kbase_device *kbdev)
+{
+	kbase_debug_dump_registers(kbdev);
+}
 static void kbasep_reset_timeout_worker(struct work_struct *data)
 {
 	unsigned long flags;
@@ -1192,6 +1214,9 @@ static void kbasep_reset_timeout_worker(struct work_struct *data)
 
 	mutex_unlock(&js_devdata->runpool_mutex);
 
+	/* MALI_SEC_INTEGRATION */
+	if (kbdev->vendor_callbacks->update_status)
+		kbdev->vendor_callbacks->update_status(kbdev, "reset_count", 0);
 	mutex_lock(&kbdev->pm.lock);
 
 	kbase_pm_reset_complete(kbdev);
@@ -1283,6 +1308,10 @@ static void kbasep_try_reset_gpu_early_locked(struct kbase_device *kbdev)
 	if (atomic_cmpxchg(&kbdev->hwaccess.backend.reset_gpu,
 			KBASE_RESET_GPU_COMMITTED, KBASE_RESET_GPU_HAPPENING) !=
 						KBASE_RESET_GPU_COMMITTED) {
+		/* MALI_SEC_INTEGRATION */
+		KBASE_KTRACE_ADD(kbdev, LSI_RESET_GPU_EARLY_DUPE, NULL, atomic_read(&kbdev->hwaccess.backend.reset_gpu));
+		dev_err(kbdev->dev,
+				"%s: unexpected reset race\n", __func__);
 		/* Reset has already occurred */
 		return;
 	}
@@ -1337,6 +1366,10 @@ bool kbase_prepare_to_reset_gpu_locked(struct kbase_device *kbdev,
 						KBASE_RESET_GPU_PREPARED) !=
 						KBASE_RESET_GPU_NOT_PENDING) {
 		/* Some other thread is already resetting the GPU */
+		/* MALI_SEC_INTEGRATION */
+		KBASE_KTRACE_ADD(kbdev, LSI_RESET_RACE_DETECTED_EARLY_OUT, NULL, atomic_read(&kbdev->hwaccess.backend.reset_gpu));
+		dev_err(kbdev->dev,
+				"%s: unexpected reset race\n", __func__);
 		return false;
 	}
 

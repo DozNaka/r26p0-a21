@@ -123,12 +123,13 @@ ccflags-y = \
     -DMALI_PLATFORM_DIR=$(MALI_PLATFORM_DIR)
 
 
+# MALI_SEC_INTEGRATION : rename CONFIG_MALI_PLATFORM_NAME to CONFIG_MALI_PLATFORM_THIRDPARTY_NAME
 ifeq ($(KBUILD_EXTMOD),)
 # in-tree
-    ccflags-y +=-DMALI_KBASE_PLATFORM_PATH=../../$(src)/platform/$(CONFIG_MALI_PLATFORM_NAME)
+    ccflags-y +=-DMALI_KBASE_PLATFORM_PATH=../../$(src)/platform/$(CONFIG_MALI_PLATFORM_THIRDPARTY_NAME)
 else
 # out-of-tree
-    ccflags-y +=-DMALI_KBASE_PLATFORM_PATH=$(src)/platform/$(CONFIG_MALI_PLATFORM_NAME)
+    ccflags-y +=-DMALI_KBASE_PLATFORM_PATH=$(src)/platform/$(CONFIG_MALI_PLATFORM_THIRDPARTY_NAME)
 endif
 
 ccflags-y += \
@@ -191,6 +192,15 @@ mali_kbase-y := \
 mali_kbase-$(CONFIG_DEBUG_FS) += mali_kbase_pbha_debugfs.o
 
 mali_kbase-$(CONFIG_MALI_CINSTR_GWT) += mali_kbase_gwt.o
+
+# Kconfig passes in the name with quotes for in-tree builds - remove them.
+# MALI_SEC_INTEGRATION : rename CONFIG_MALI_PLATFORM_NAME to CONFIG_MALI_PLATFORM_THIRDPARTY_NAME
+platform_name := $(shell echo $(CONFIG_MALI_PLATFORM_THIRDPARTY_NAME))
+MALI_PLATFORM_DIR := platform/$(platform_name)
+ccflags-y += -I$(src)/$(MALI_PLATFORM_DIR)
+#include $(src)/$(MALI_PLATFORM_DIR)/Kbuild
+obj-$(CONFIG_MALI_MIDGARD) += platform/
+#mali_kbase-y += $(PLATFORM_THIRDPARTY:.c=.o)
 
 mali_kbase-$(CONFIG_SYNC) += \
     mali_kbase_sync_android.o \

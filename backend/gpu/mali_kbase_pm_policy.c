@@ -39,9 +39,11 @@ static const struct kbase_pm_policy *const all_policy_list[] = {
 #if IS_ENABLED(CONFIG_MALI_NO_MALI)
 	&kbase_pm_always_on_policy_ops,
 	&kbase_pm_coarse_demand_policy_ops,
+	&kbase_pm_adaptive_policy_ops
 #else /* CONFIG_MALI_NO_MALI */
+	&kbase_pm_adaptive_policy_ops,
 	&kbase_pm_coarse_demand_policy_ops,
-	&kbase_pm_always_on_policy_ops,
+	&kbase_pm_always_on_policy_ops
 #endif /* CONFIG_MALI_NO_MALI */
 };
 
@@ -296,6 +298,8 @@ void kbase_pm_set_policy(struct kbase_device *kbdev,
 
 	KBASE_DEBUG_ASSERT(kbdev != NULL);
 	KBASE_DEBUG_ASSERT(new_policy != NULL);
+
+	memset(&kbdev->pm.backend.pm_policy_data, 0, sizeof(union kbase_pm_policy_data));
 
 	KBASE_KTRACE_ADD(kbdev, PM_SET_POLICY, NULL, new_policy->id);
 
